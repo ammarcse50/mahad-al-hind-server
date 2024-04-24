@@ -11,7 +11,7 @@
             "src": "/(.*)",
             "dest": "/",
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            "headers":{"Access-Control-A110w-Origin" : "*" }
+           
 
         }
     ]
