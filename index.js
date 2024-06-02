@@ -1,6 +1,8 @@
 const express = require("express");
 require("dotenv").config();
 const cors = require("cors");
+const multer = require('multer');
+const path = require('path');
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -14,7 +16,7 @@ app.get("/", async (req, res) => {
   console.log("mahad server is running");
 });
 
-const { MongoClient, ServerApiVersion, Collection } = require("mongodb");
+const { MongoClient, ServerApiVersion, Collection, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.t9lecvs.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -36,25 +38,55 @@ async function run() {
     const messageCollection = client.db("mahadDb").collection("messages");
     const courseCollection = client.db("mahadDb").collection("courses");
 
+    const storage = multer.diskStorage({
+      destination: function (req, file, cb) {
+        cb(null, 'uploads/')
+      },
+      filename: function (req, file, cb) {
+        const name = Date.now() + "_" + file.originalname;
+        cb(null, name)
+      }
+    })
+    
+    const upload = multer({ storage: storage })
+
+
+
     app.get("/users", async (req, res) => {
+      console.log(req.query)
       const users = req.body;
       const cursor = userCollection.find();
 
       const result =await cursor.toArray();
-
+  
       res.send(result);
     });
+   
 
-    app.post("/users", async (req, res) => {
+    app.post("/users",upload.single('image'), async (req, res) => {
+      console.log(req.file)
       const users = req.body;
 
       const result = await userCollection.insertOne(users);
       res.send(result);
     });
 
-    app.get("/students", async (req, res) => {
 
-      const cursor = studentCollection.find();
+    app.get("/students", async (req, res) => {
+       
+        const user= req.body;
+      
+        let query = {}
+        if(req.query?.email)
+          {
+             query :{ email: req.query.email}
+          }
+       console.log(req.query.email)
+
+      const cursor = studentCollection.find(query);
+       
+
+
 
       const result =await cursor.toArray();
          console.log(result)
@@ -102,6 +134,12 @@ async function run() {
 
       res.send(result);
     });
+
+    // file upload
+  
+     
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
