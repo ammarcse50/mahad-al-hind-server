@@ -61,14 +61,20 @@ async function run() {
     const upload = multer({ storage: storage });
 
     app.get("/users", async (req, res) => {
-      console.log(req.query);
-      const users = req.body;
-      const cursor = userCollection.find();
+   
+      let query = {};
+      if (req.query?.email) {
+        query = { email: req?.query?.email };
+      }
+      console.log(req.query.email);
 
-      const result = await cursor.toArray();
+      const result = await userCollection.find(query).toArray();
+      console.log(result);
+    
 
       res.send(result);
     });
+
 
     app.post("/users", upload.single("image"), async (req, res) => {
       console.log(req.file);
@@ -81,16 +87,34 @@ async function run() {
     app.get("/students", async (req, res) => {
       let query = {};
       if (req.query?.email) {
-        query = { email: req.query.email };
+        query = { email: req?.query?.email };
       }
       console.log(req.query.email);
 
-   
       const result = await studentCollection.find(query).toArray();
       console.log(result);
       res.send(result);
     });
+    app.put("/students", async (req, res) => {
+      const id = req.params.id;
 
+      const studentUpdate = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          first_name: studentUpdate.first_name,
+          last_name: studentUpdate.last_name,
+          number: studentUpdate.number,
+          gender: studentUpdate.gender,
+          address: studentUpdate.address,
+        },
+      };
+   
+      const result = await studentCollection.updateOne(filter, updateDoc, options);
+      res.send(result)
+
+    });
     app.post("/students", async (req, res) => {
       const students = req.body;
 
