@@ -2,12 +2,16 @@ const express = require("express");
 require("dotenv").config();
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const multer = require("multer");
+const jwt = require("jsonwebtoken");
 const path = require("path");
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5173"],
+  })
+);
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // parse application/json
@@ -47,48 +51,82 @@ async function run() {
     const studentCollection = client.db("mahadDb").collection("students");
     const messageCollection = client.db("mahadDb").collection("messages");
     const courseCollection = client.db("mahadDb").collection("courses");
+    const reviewCollection = client.db("mahadDb").collection("reviews");
 
-    const storage = multer.diskStorage({
-      destination: function (req, file, cb) {
-        cb(null, "uploads/");
-      },
-      filename: function (req, file, cb) {
-        const name = Date.now() + "_" + file.originalname;
-        cb(null, name);
-      },
+    // JWT WEB TOKEN RELATED API
+
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "24h",
+      });
+
+      res.send({ token });
     });
 
-    const upload = multer({ storage: storage });
+    // VerifyToken
 
-    app.get("/users", async (req, res) => {
-   
-      let query = {};
-      if (req.query?.email) {
-        query = { email: req?.query?.email };
+    const VerifyToken = async (req, res, next) => {
+      console.log("inside verifyToken", req.headers.token);
+
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "forbidden access" });
       }
+
+      const token = req.headers.authorization.split(" ")[1];
+
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+        if (error) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
+
+        req.decoded = decoded;
+        next();
+      });
+    };
+    // Admin routes api
+
+    //  app.get('/users/admin/:email',async(req,res)=>{
+
+    //      const query = req.params.email;
+
+    //  })
+
+    // users section api
+    app.get("/users", async (req, res) => {
+      const query = { email: req.query.email };
+
       console.log(req.query.email);
 
       const result = await userCollection.find(query).toArray();
       console.log(result);
-    
 
       res.send(result);
     });
 
+    app.post("/users", async (req, res) => {
+      const user = req.body;
 
-    app.post("/users", upload.single("image"), async (req, res) => {
-      console.log(req.file);
-      const users = req.body;
-
-      const result = await userCollection.insertOne(users);
-      res.send(result);
-    });
-
-    app.get("/students", async (req, res) => {
-      let query = {};
-      if (req.query?.email) {
-        query = { email: req?.query?.email };
+      const query = {
+        email: user?.email,
+      };
+      const exist = await userCollection.findOne(query);
+      if (exist) {
+        return res.send({ message: "already exists user", insertedId: null });
+      } else {
+        const result = await userCollection.insertOne(user);
+        res.send(result);
       }
+    });
+    //       students section api
+
+    app.get("/students", VerifyToken, async (req, res) => {
+      // let query = {};
+      const query = { email: req.query.email };
+      // if (req.query?.email) {
+      //   query = { email: req?.query?.email };
+      // }
       console.log(req.query.email);
 
       const result = await studentCollection.find(query).toArray();
@@ -110,10 +148,13 @@ async function run() {
           address: studentUpdate.address,
         },
       };
-   
-      const result = await studentCollection.updateOne(filter, updateDoc, options);
-      res.send(result)
 
+      const result = await studentCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
     });
     app.post("/students", async (req, res) => {
       const students = req.body;
@@ -157,13 +198,29 @@ async function run() {
       res.send(result);
     });
 
-    // file upload
+    /**
+     * Reviews api
+     *
+     */
+
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewCollection.find().toArray();
+
+      res.send(result);
+    });
+
+    app.post("/reviews", VerifyToken, async (req, res) => {
+      const review = req.body;
+
+      const result = await reviewCollection.insertOne(review);
+      res.send(result)
+    });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
