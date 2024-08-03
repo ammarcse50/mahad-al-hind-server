@@ -196,7 +196,7 @@ async function run() {
       const studentCount = await studentCollection.estimatedDocumentCount();
       res.send({ studentCount });
     });
-    
+
     app.get("/students", VerifyToken, verifyAdmin, async (req, res) => {
       const result = await studentCollection.find().toArray();
       res.send(result);
@@ -257,13 +257,12 @@ async function run() {
 
     // message collection api
 
-    app.get("/contact", async (req, res) => {
-      const cursor = messageCollection.find();
-
-      const result = await cursor.toArray();
+    app.get("/contact", VerifyToken, verifyAdmin, async (req, res) => {
+      const result = await messageCollection.find().toArray();
 
       res.send(result);
     });
+
     app.post("/contact", async (req, res) => {
       const message = req.body;
 
