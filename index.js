@@ -196,6 +196,7 @@ async function run() {
       const studentCount = await studentCollection.estimatedDocumentCount();
       res.send({ studentCount });
     });
+    
     app.get("/students", VerifyToken, verifyAdmin, async (req, res) => {
       const result = await studentCollection.find().toArray();
       res.send(result);
@@ -277,7 +278,7 @@ async function run() {
 
       const query = { _id: new ObjectId(id) };
 
-      const result = courseCollection.deleteOne(query);
+      const result = await courseCollection.deleteOne(query);
 
       res.send(result);
     });
@@ -287,9 +288,7 @@ async function run() {
       res.send({ courseCount });
     });
     app.get("/courses", async (req, res) => {
-      const cursor = courseCollection.find();
-
-      const result = await cursor.toArray();
+      const result = await courseCollection.find().toArray();
 
       res.send(result);
     });
@@ -336,7 +335,7 @@ async function run() {
       const email = req.params.email;
 
       const query = { email: email };
-      const result = certificateCollection.findOne(query);
+      const result = await certificateCollection.findOne(query);
       if (result) {
         res.send(result);
       } else {
