@@ -9,7 +9,11 @@ const port = process.env.PORT || 5000;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://mahad-al-hind.web.app",
+    ],
   })
 );
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -31,6 +35,7 @@ const {
   Collection,
   ObjectId,
 } = require("mongodb");
+const { verify } = require("crypto");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.t9lecvs.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -52,6 +57,9 @@ async function run() {
     const messageCollection = client.db("mahadDb").collection("messages");
     const courseCollection = client.db("mahadDb").collection("courses");
     const reviewCollection = client.db("mahadDb").collection("reviews");
+    const certificateCollection = client
+      .db("mahadDb")
+      .collection("certificates");
 
     // JWT WEB TOKEN RELATED API
 
@@ -78,28 +86,91 @@ async function run() {
 
       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
         if (error) {
-          return res.status(403).send({ message: "forbidden access" });
+          return res.status(403).send({ message: "Forbidden Access" });
         }
 
         req.decoded = decoded;
         next();
       });
     };
+
+    // verify Admin after verifying token
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+
+      const query = { email: email };
+
+      const user = await userCollection.findOne(query);
+
+      if (user && user.role === "admin") {
+        next();
+      } else {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+    };
+
     // Admin routes api
 
-    //  app.get('/users/admin/:email',async(req,res)=>{
+    app.get("/users/admin/:email", VerifyToken, async (req, res) => {
+      const email = req.params.email;
 
-    //      const query = req.params.email;
+      if (email !== req.decoded.email) {
+        res.status(401).send({ message: "Forbidden Access" });
+      }
+      const query = { email: email };
 
-    //  })
+      const user = await userCollection.findOne(query);
+
+      if (user && user.role === "admin") {
+        res.status(200).send({ Admin: true });
+      } else {
+        res.status(200).send({ Admin: false });
+      }
+    });
 
     // users section api
+
+    app.get("/userCount", VerifyToken, verifyAdmin, async (req, res) => {
+      const userCount = await userCollection.estimatedDocumentCount();
+      res.send({ userCount });
+    });
+
+    app.patch(
+      "/users/admin/:id",
+      VerifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const updateAdmin = {
+          $set: {
+            role: "admin",
+          },
+        };
+
+        const result = await userCollection.updateOne(query, updateAdmin);
+
+        res.send(result);
+      }
+    );
+
+    app.delete("/users/:id", VerifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+
+      const query = { _id: new ObjectId(id) };
+
+      const result = await userCollection.deleteOne(query);
+
+      res.send(result);
+    });
     app.get("/users", async (req, res) => {
-      const query = { email: req.query.email };
+      // const query = { email: req.query.email };
 
-      console.log(req.query.email);
+      // console.log(req.query.email);
 
-      const result = await userCollection.find(query).toArray();
+      const result = await userCollection.find().toArray();
       console.log(result);
 
       res.send(result);
@@ -121,24 +192,40 @@ async function run() {
     });
     //       students section api
 
-    app.get("/students", VerifyToken, async (req, res) => {
+    app.get("/studentCount", VerifyToken, verifyAdmin, async (req, res) => {
+      const studentCount = await studentCollection.estimatedDocumentCount();
+      res.send({ studentCount });
+    });
+    app.get("/students", VerifyToken, verifyAdmin, async (req, res) => {
+      const result = await studentCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.delete("/students/:id", VerifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+
+      const query = { _id: new ObjectId(id) };
+
+      const result = await studentCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.get("/students/:email", VerifyToken, async (req, res) => {
       // let query = {};
-      const query = { email: req.query.email };
+      const query = { email: req.params.email };
       // if (req.query?.email) {
       //   query = { email: req?.query?.email };
       // }
-      console.log(req.query.email);
 
-      const result = await studentCollection.find(query).toArray();
-      console.log(result);
+      const result = await studentCollection.findOne(query);
+
       res.send(result);
     });
-    app.put("/students", async (req, res) => {
-      const id = req.params.id;
-
+    app.patch("/students/:id", VerifyToken, async (req, res) => {
       const studentUpdate = req.body;
+      const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
+
       const updateDoc = {
         $set: {
           first_name: studentUpdate.first_name,
@@ -149,18 +236,20 @@ async function run() {
         },
       };
 
-      const result = await studentCollection.updateOne(
-        filter,
-        updateDoc,
-        options
-      );
+      const result = await studentCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
     app.post("/students", async (req, res) => {
-      const students = req.body;
+      const student = req.body;
 
-      console.log(students);
-      const result = await studentCollection.insertOne(students);
+      const query = student.email;
+      const exist = await studentCollection.findOne(query);
+
+      if (exist) {
+        res.status(404).send({ message: "Already exist", insertedId: null });
+      }
+
+      const result = await studentCollection.insertOne(student);
 
       res.send(result);
     });
@@ -183,6 +272,20 @@ async function run() {
     });
     // courses  api
 
+    app.delete("/courses/:id", VerifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+
+      const query = { _id: new ObjectId(id) };
+
+      const result = courseCollection.deleteOne(query);
+
+      res.send(result);
+    });
+    app.get("/courseCount", VerifyToken, verifyAdmin, async (req, res) => {
+      const courseCount = await courseCollection.estimatedDocumentCount();
+
+      res.send({ courseCount });
+    });
     app.get("/courses", async (req, res) => {
       const cursor = courseCollection.find();
 
@@ -203,6 +306,10 @@ async function run() {
      *
      */
 
+    app.get("/reviewCount", VerifyToken, verifyAdmin, async (req, res) => {
+      const reviewCount = await reviewCollection.estimatedDocumentCount();
+      res.send({ reviewCount });
+    });
     app.get("/reviews", async (req, res) => {
       const result = await reviewCollection.find().toArray();
 
@@ -213,7 +320,40 @@ async function run() {
       const review = req.body;
 
       const result = await reviewCollection.insertOne(review);
-      res.send(result)
+      res.send(result);
+    });
+
+    // Certificate Related Api
+
+    app.get("/certificateCount", VerifyToken, verifyAdmin, async (req, res) => {
+      const certificateCount =
+        await certificateCollection.estimatedDocumentCount();
+
+      res.send({ certificateCount });
+    });
+
+    app.get("/certificate/:email", VerifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      const query = { email: email };
+      const result = certificateCollection.findOne(query);
+      if (result) {
+        res.send(result);
+      } else {
+        res.send({ message: "Your Course not completed yet!" });
+      }
+    });
+
+    app.get("/certificate", VerifyToken, verifyAdmin, async (req, res) => {
+      const result = await certificateCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/certificate", VerifyToken, verifyAdmin, async (req, res) => {
+      const query = req.body;
+
+      const result = await certificateCollection.insertOne(query);
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
