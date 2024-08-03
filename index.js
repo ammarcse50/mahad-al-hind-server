@@ -165,6 +165,18 @@ async function run() {
 
       res.send(result);
     });
+
+    app.get("/users", async (req, res) => {
+      const query = { email: req.query.email };
+
+      console.log(req.query.email);
+
+      const result = await userCollection.findOne(query);
+      console.log(result);
+
+      res.send(result);
+    });
+
     app.get("/users", async (req, res) => {
       // const query = { email: req.query.email };
 
@@ -222,14 +234,16 @@ async function run() {
 
       res.send(result);
     });
-    app.patch("/students/:id", VerifyToken, async (req, res) => {
-      const studentUpdate = req.body;
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-
+    app.put("/students/:email", VerifyToken, async (req, res) => {
+      // const studentUpdate = req.body;
+      // const id = req.params.id;
+      const filter = { email: req.query.email };
+      const options = { upsert: true };
       const updateDoc = {
         $set: {
+          email: filter,
           first_name: studentUpdate.first_name,
+
           last_name: studentUpdate.last_name,
           number: studentUpdate.number,
           gender: studentUpdate.gender,
@@ -237,7 +251,11 @@ async function run() {
         },
       };
 
-      const result = await studentCollection.updateOne(filter, updateDoc);
+      const result = await studentCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
       res.send(result);
     });
     app.post("/students", async (req, res) => {
