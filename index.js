@@ -177,13 +177,14 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
+    app.get("/allUsers",VerifyToken,verifyAdmin, async (req, res) => {
       // const query = { email: req.query.email };
 
       // console.log(req.query.email);
-
+     
       const result = await userCollection.find().toArray();
-      console.log(result);
+      
+      console.log("users", result);
 
       res.send(result);
     });
